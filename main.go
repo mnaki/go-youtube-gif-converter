@@ -9,34 +9,54 @@ import (
 	fluentffmpeg "github.com/modfy/fluent-ffmpeg"
 )
 
-func GetYoutubeStreamFromURL(url string) (*io.ReadCloser, int64, error) {
+func GetYoutubeStreamFromURL(url string) (*Video, error) {
 	youtubeClient := youtube.Client{}
 
 	youtubeVideoID, err := youtube.ExtractVideoID(url)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	youtubeVideo, err := youtubeClient.GetVideo(youtubeVideoID)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
-	videoFormats := youtubeVideo.Formats.FindByItag(133) // 133 = mp4 240p
-	youtubeReader, formatSize, err := youtubeClient.GetStream(youtubeVideo, videoFormats)
+	videoFormat := youtubeVideo.Formats.FindByItag(133) // 133 = mp4 240p
+	youtubeReader, formatSize, err := youtubeClient.GetStream(youtubeVideo, videoFormat)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
-	return &youtubeReader, formatSize, nil
+	return &Video{
+		&youtubeReader,
+		formatSize,
+		videoFormat,
+		&youtubeClient,
+	}, nil
 }
 
-func ConvertStream(r *io.ReadCloser, _ int64, w *os.File) error {
+type Video struct {
+	stream *io.ReadCloser
+	size   int64
+	format *youtube.Format
+	client *youtube.Client
+}
 
-	fluentffmpeg.
-		NewCommand("").
-		PipeInput(*r).
-		OutputFormat("gif").
-		PipeOutput(w).
-		Run()
+func ConvertStream(r *io.ReadCloser, _ int64, w *io.Writer) error {
+
+	cmd := fluentffmpeg.NewCommand("")
+	cmd.PipeInput(*r)
+	cmd.OutputFormat("gif")
+	cmd.PipeOutput(*w)
+	cmd.FrameRate(12)
+	cmd.InputOptions(
+		"-t", "5",
+		"-ss", "30",
+	)
+	cmd.OutputOptions(
+		"-vf", "fps=10,scale=320:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse",
+		"-loop", "0",
+	)
+	cmd.Run()
 
 	return nil
 }
@@ -46,7 +66,7 @@ func main() {
 
 	fmt.Println(url)
 
-	youtubeReader, size, err := GetYoutubeStreamFromURL(url)
+	video, err := GetYoutubeStreamFromURL(url)
 	if err != nil {
 		panic(err)
 	}
@@ -54,7 +74,12 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	ConvertStream(youtubeReader, size, file)
+	defer file.Close()
+
+	// Create new Writer from file
+	writer := io.Writer(file)
+
+	ConvertStream(video.stream, video.size, &writer)
 	if err != nil {
 		panic(err)
 	}
