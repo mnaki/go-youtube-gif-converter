@@ -4,10 +4,9 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
-	"sync"
 
 	youtube "github.com/kkdai/youtube/v2"
+	fluentffmpeg "github.com/modfy/fluent-ffmpeg"
 )
 
 func GetYoutubeStreamFromURL(url string) (*io.ReadCloser, int64, error) {
@@ -30,59 +29,20 @@ func GetYoutubeStreamFromURL(url string) (*io.ReadCloser, int64, error) {
 	return &youtubeReader, formatSize, nil
 }
 
-func ConvertStream(youtubeReader *io.ReadCloser, formatSize int64, w *os.File) error {
+func ConvertStream(r *io.ReadCloser, _ int64, w *os.File) error {
 
-	ffmpegCmd := exec.Command(
-		"ffmpeg",
-		"-ss",
-		"30",
-		"-t",
-		"3",
-		"-i",
-		"pipe:0",
-		"-loglevel",
-		"0",
-		"-vf",
-		"fps=10,scale=320:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse",
-		"-loop",
-		"0",
-		"-f",
-		"gif",
-		"-",
-	)
+	fluentffmpeg.
+		NewCommand("").
+		PipeInput(*r).
+		OutputFormat("gif").
+		PipeOutput(w).
+		Run()
 
-	ffmpegCmd.Stderr = os.Stderr
-	ffmpegCmd.Stdout = w
-	pipe, err := ffmpegCmd.StdinPipe()
-	if err != nil {
-		panic(err)
-	}
-
-	wg := &sync.WaitGroup{}
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		_, err := io.CopyN(pipe, *youtubeReader, formatSize)
-		if err != nil {
-			fmt.Println(err)
-		}
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		err := ffmpegCmd.Run()
-		if err != nil {
-			panic(err)
-		}
-	}()
-
-	wg.Wait()
 	return nil
 }
 
 func main() {
-	url := os.Args[1]
+	url := os.Args[len(os.Args)-1]
 
 	fmt.Println(url)
 
@@ -90,7 +50,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	file, err := os.Create(os.Args[2])
+	file, err := os.Create(os.Args[len(os.Args)-2])
 	if err != nil {
 		panic(err)
 	}
