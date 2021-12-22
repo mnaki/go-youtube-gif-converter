@@ -32,7 +32,7 @@ func GetYoutubeStreamFromURL(url string) (*io.ReadCloser, int64, error) {
 
 func ConvertStream(youtubeReader *io.ReadCloser, formatSize int64, w *os.File) error {
 
-	cmd := exec.Command(
+	ffmpegCmd := exec.Command(
 		"ffmpeg",
 		"-ss",
 		"30",
@@ -40,6 +40,8 @@ func ConvertStream(youtubeReader *io.ReadCloser, formatSize int64, w *os.File) e
 		"3",
 		"-i",
 		"pipe:0",
+		"-loglevel",
+		"0",
 		"-vf",
 		"fps=10,scale=320:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse",
 		"-loop",
@@ -49,9 +51,9 @@ func ConvertStream(youtubeReader *io.ReadCloser, formatSize int64, w *os.File) e
 		"-",
 	)
 
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = w
-	pipe, err := cmd.StdinPipe()
+	ffmpegCmd.Stderr = os.Stderr
+	ffmpegCmd.Stdout = w
+	pipe, err := ffmpegCmd.StdinPipe()
 	if err != nil {
 		panic(err)
 	}
@@ -69,7 +71,7 @@ func ConvertStream(youtubeReader *io.ReadCloser, formatSize int64, w *os.File) e
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := cmd.Run()
+		err := ffmpegCmd.Run()
 		if err != nil {
 			panic(err)
 		}
@@ -80,13 +82,19 @@ func ConvertStream(youtubeReader *io.ReadCloser, formatSize int64, w *os.File) e
 }
 
 func main() {
-	url := "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+	url := os.Args[1]
+
+	fmt.Println(url)
 
 	youtubeReader, size, err := GetYoutubeStreamFromURL(url)
 	if err != nil {
 		panic(err)
 	}
-	ConvertStream(youtubeReader, size, os.Stdout)
+	file, err := os.Create(os.Args[2])
+	if err != nil {
+		panic(err)
+	}
+	ConvertStream(youtubeReader, size, file)
 	if err != nil {
 		panic(err)
 	}
