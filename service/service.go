@@ -17,7 +17,7 @@ import (
 	"gorm.io/gorm"
 )
 
-var db *gorm.DB = nil
+var gDatabase *gorm.DB = nil
 
 func InitializeDatabase() (*gorm.DB, error) {
 	var err error
@@ -31,7 +31,7 @@ func InitializeDatabase() (*gorm.DB, error) {
 		log.Printf("Error auto-migrating database: %s\n", err)
 		return nil, err
 	}
-	db = _db
+	gDatabase = _db
 	return _db, nil
 }
 
@@ -155,13 +155,13 @@ func PostGIFHandler(response http.ResponseWriter, request *http.Request) {
 		GIFFileName:      fmt.Sprintf("%s_%s.gif", conversionUUID, videoID),
 		VideoFileName:    fmt.Sprintf("%s_%s.mp4", conversionUUID, videoID),
 	}
-	err = db.Create(&gifMetaData).Error
+	err = gDatabase.Create(&gifMetaData).Error
 	if err != nil {
 		fmt.Printf("UUID=%s | Error creating gifMetaData: %s\n", conversionUUID, err)
 		response.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	go convertVideoToGIF(db, &gifMetaData)
+	go convertVideoToGIF(gDatabase, &gifMetaData)
 	// Return conversionUUID in a JSON response
 	response.Header().Set("Content-Type", "application/json")
 	response.WriteHeader(http.StatusOK)
@@ -176,7 +176,7 @@ func GetGIFHandler(response http.ResponseWriter, request *http.Request) {
 	videoID := request.URL.Query().Get("videoID")
 	// Get first GIFMetaData with videoID
 	var gifMetaData GIFMetaData
-	db.Where(GIFMetaData{VideoID: videoID, ConversionStatus: "done"}).First(&gifMetaData)
+	gDatabase.Where(GIFMetaData{VideoID: videoID, ConversionStatus: "done"}).First(&gifMetaData)
 	// Open GIF file
 	gifFile, err := os.Open(gifMetaData.GIFFileName)
 	// If GIFMetaData found, return GIF
@@ -197,26 +197,34 @@ func GetGIFHandler(response http.ResponseWriter, request *http.Request) {
 // Fetch status from GIFMetaData and return JSON response with status and videoID of GIF
 func GetGIFStatusHandler(response http.ResponseWriter, request *http.Request) {
 	// Get videoID from request URL
-	videoID := request.URL.Query().Get("videoID")
+	videoID := request.
+		URL.
+		Query().
+		Get("videoID")
 	// Get all GIFMetaData with videoID
 
 	var gifMetaDatas []*GIFMetaData
-	db.Where(GIFMetaData{VideoID: videoID}).Find(&gifMetaDatas)
+	gDatabase.
+		Where(GIFMetaData{VideoID: videoID}).
+		Find(&gifMetaDatas)
 
-	var gmdArray []map[string]string
-	for _, gmd := range gifMetaDatas {
+	var dataMap []map[string]string
+	for _, data := range gifMetaDatas {
 		// Print debug
-		log.Printf("%+v\n", gmd)
-		gmdArray = append(gmdArray, map[string]string{
-			"videoID":        gmd.VideoID,
-			"conversionUUID": gmd.ConversionUUID,
-			"status":         gmd.ConversionStatus,
+		log.Printf("%+v\n", data)
+		dataMap = append(dataMap, map[string]string{
+			"videoID":        data.VideoID,
+			"conversionUUID": data.ConversionUUID,
+			"status":         data.ConversionStatus,
 		})
 	}
 
 	// Return JSON response with status and videoID
-	response.Header().Set("Content-Type", "application/json")
-	response.WriteHeader(http.StatusOK)
+	response.
+		Header().
+		Set("Content-Type", "application/json")
+	response.
+		WriteHeader(http.StatusOK)
 	// Write JSON response to response
-	json.NewEncoder(response).Encode(gmdArray)
+	json.NewEncoder(response).Encode(dataMap)
 }

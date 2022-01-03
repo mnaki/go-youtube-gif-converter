@@ -3,7 +3,7 @@
 ## Usage
 
 ```bash
-go build ; ./gotube2mp3.exe
+go build ; ./go-youtube-gif-converter.exe
 
 ```
 

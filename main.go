@@ -1,7 +1,7 @@
 package main
 
 import (
-	"gotube2mp3/service"
+	"go-youtube-gif-converter/service"
 	"log"
 	"net/http"
 
